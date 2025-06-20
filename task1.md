@@ -133,7 +133,8 @@ This document contains my findings from exploratory testing of the Goodbudget ap
 - **Actual Result**: Future dates are accepted without any validation or warning.
 - **Impact**: Users may accidentally enter incorrect dates, causing budget calculations to be inaccurate.
 - **Evidence**: The screenshots show the transaction made with past date as the past dates need to be grayed out
-  - ![image](https://github.com/user-attachments/assets/e2405011-6f47-42fc-866e-9f96bd4b6a61)
+  ![image](https://github.com/user-attachments/assets/3c0610cb-be07-4afc-bbe2-ed8014f35355)
+
 
 ### Charter 2 Findings: Envelope Budgeting System
 
