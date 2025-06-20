@@ -31,13 +31,13 @@ I conducted exploratory testing focusing on the core functionality of adding tra
   2. Select "Expense/Credit" tab
   3. Enter date (06/20/2025)
   4. Enter payee ("nitban")
-  5. Enter amount (5000)
+  5. Enter amount (5150)
   6. Select "Savings" envelope
   7. Select "My Account" as the account
-  8. Enter check number (465)
+  8. Enter check number ()
   9. Save the transaction
 - **Expected Result**: Clear indication that expenses reduce envelope balance with intuitive representation.
-- **Actual Result**: The Savings envelope shows "-5,000.00" in red, which could be misinterpreted as an error or overspending rather than a recorded expense.
+- **Actual Result**: The Savings envelope shows "-5,150.00" in red, which could be misinterpreted as an error or overspending rather than a recorded expense.
 - **Impact**: Users may be confused about the state of their budget, potentially leading to financial mismanagement or abandonment of the application.
 - **Evidence**: The screenshots show the transaction entry form with a 5000 expense and the resulting -5000 balance in the Savings envelope.
 - ![image](https://github.com/user-attachments/assets/db19a251-5916-4d39-8c66-0c922a65d762)
