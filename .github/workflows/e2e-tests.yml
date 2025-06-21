@@ -30,9 +30,6 @@ jobs:
   lint-and-typecheck:
     name: Lint and Type Check
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./task2-automation
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -42,7 +39,9 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
-          cache-dependency-path: task2-automation/package-lock.json
+
+      - name: Navigate to task2-automation
+        run: cd task2-automation
 
       - name: Install dependencies
         run: npm install
