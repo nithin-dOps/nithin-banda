@@ -1,0 +1,271 @@
+name: E2E Tests - Goodbudget Application
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  schedule:
+    # Run tests daily at 2 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      browser:
+        description: 'Browser to test'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - chromium
+          - firefox
+          - webkit
+
+env:
+  NODE_VERSION: '18'
+  BASE_URL: 'https://goodbudget.com'
+
+jobs:
+  # Lint and type check
+  lint-and-typecheck:
+    name: Lint and Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run TypeScript type check
+        run: npx tsc --noEmit
+
+      - name: Run ESLint (if configured)
+        run: |
+          if [ -f ".eslintrc.js" ] || [ -f ".eslintrc.json" ] || [ -f "eslint.config.js" ]; then
+            npx eslint tests/
+          else
+            echo "ESLint not configured, skipping..."
+          fi
+        continue-on-error: true
+
+  # Cross-browser testing matrix
+  e2e-tests:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    needs: lint-and-typecheck
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox, webkit]
+        include:
+          - browser: chromium
+            project: chromium
+          - browser: firefox
+            project: firefox
+          - browser: webkit
+            project: webkit
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps ${{ matrix.browser }}
+
+      - name: Run E2E tests
+        run: npx playwright test --project=${{ matrix.project }}
+        env:
+          CI: true
+          BASE_URL: ${{ env.BASE_URL }}
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results-${{ matrix.browser }}
+          path: |
+            test-results/
+            playwright-report/
+          retention-days: 7
+
+      - name: Upload HTML report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: html-report-${{ matrix.browser }}
+          path: test-results/html-report/
+          retention-days: 7
+
+  # Docker-based testing
+  docker-tests:
+    name: Docker E2E Tests
+    runs-on: ubuntu-latest
+    needs: lint-and-typecheck
+    strategy:
+      matrix:
+        browser: [chromium, firefox, webkit]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build test image
+        run: |
+          docker build --target test-runner -t goodbudget-e2e:latest .
+
+      - name: Run tests in Docker
+        run: |
+          docker run --rm \
+            -v $(pwd)/test-results:/app/test-results \
+            -e CI=true \
+            -e BASE_URL=${{ env.BASE_URL }} \
+            goodbudget-e2e:latest \
+            npm run test:${{ matrix.browser }}
+
+      - name: Upload Docker test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: docker-test-results-${{ matrix.browser }}
+          path: test-results/
+          retention-days: 7
+
+  # Parallel execution test
+  parallel-tests:
+    name: Parallel Cross-Browser Tests
+    runs-on: ubuntu-latest
+    needs: lint-and-typecheck
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install all Playwright browsers
+        run: npx playwright install --with-deps
+
+      - name: Run parallel tests across all browsers
+        run: npm run test:parallel
+        env:
+          CI: true
+          BASE_URL: ${{ env.BASE_URL }}
+
+      - name: Upload parallel test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: parallel-test-results
+          path: |
+            test-results/
+            playwright-report/
+          retention-days: 7
+
+  # Test report generation and publishing
+  publish-results:
+    name: Publish Test Results
+    runs-on: ubuntu-latest
+    needs: [e2e-tests, docker-tests]
+    if: always()
+
+    steps:
+      - name: Download all test artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: all-test-results
+
+      - name: Merge test results
+        run: |
+          mkdir -p merged-results
+          find all-test-results -name "*.json" -exec cp {} merged-results/ \;
+          find all-test-results -name "*.xml" -exec cp {} merged-results/ \;
+
+      - name: Publish test results
+        uses: dorny/test-reporter@v1
+        if: always()
+        with:
+          name: E2E Test Results
+          path: 'merged-results/*.xml'
+          reporter: java-junit
+          fail-on-error: false
+
+      - name: Create test summary
+        if: always()
+        run: |
+          echo "## 🧪 E2E Test Results Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Browser Test Results:" >> $GITHUB_STEP_SUMMARY
+          echo "- **Chromium**: $(find all-test-results -name "*chromium*" -type d | wc -l) test runs" >> $GITHUB_STEP_SUMMARY
+          echo "- **Firefox**: $(find all-test-results -name "*firefox*" -type d | wc -l) test runs" >> $GITHUB_STEP_SUMMARY
+          echo "- **WebKit**: $(find all-test-results -name "*webkit*" -type d | wc -l) test runs" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Test Artifacts:" >> $GITHUB_STEP_SUMMARY
+          echo "- Test reports and screenshots are available in the artifacts section" >> $GITHUB_STEP_SUMMARY
+          echo "- Docker-based test results are also included" >> $GITHUB_STEP_SUMMARY
+
+  # Notification on failure
+  notify-failure:
+    name: Notify on Test Failure
+    runs-on: ubuntu-latest
+    needs: [e2e-tests, docker-tests, parallel-tests]
+    if: failure() && (github.event_name == 'push' || github.event_name == 'schedule')
+
+    steps:
+      - name: Create failure issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = `🚨 E2E Tests Failed - ${new Date().toISOString().split('T')[0]}`;
+            const body = `
+            ## E2E Test Failure Report
+            
+            **Workflow**: ${context.workflow}
+            **Run ID**: ${context.runId}
+            **Commit**: ${context.sha}
+            **Branch**: ${context.ref}
+            
+            The automated E2E tests have failed. Please check the workflow logs and test artifacts for details.
+            
+            ### Next Steps:
+            1. Review the test failure logs
+            2. Check if this is a known issue
+            3. Fix the failing tests or update them if the application behavior has changed
+            4. Re-run the tests to verify the fix
+            
+            **Auto-generated by GitHub Actions**
+            `;
+            
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: title,
+              body: body,
+              labels: ['bug', 'e2e-tests', 'automated']
+            });
