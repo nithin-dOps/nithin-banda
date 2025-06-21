@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Goodbudget E2E Test Automation Framework
 
 A comprehensive end-to-end test automation framework for the Goodbudget web application using Playwright with TypeScript, featuring cross-browser testing, Docker support, and CI/CD integration.
@@ -329,3 +330,6 @@ For issues and questions:
 **Playwright Version**: 1.40.0  
 **Node.js Version**: 18+  
 **Last Updated**: 2025-06-20
+=======
+# nithin-banda
+>>>>>>> 7112dcd526f63f6de21597aa1fc1bf3e8fe21571
