@@ -41,10 +41,19 @@ jobs:
           cache: 'npm'
           cache-dependency-path: task2-automation/package-lock.json
 
+      - name: Cache node modules
+        uses: actions/cache@v4
+        id: cache
+        with:
+          path: task2-automation/node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('task2-automation/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+            
       - name: Install dependencies and run type check
         working-directory: ./task2-automation
         run: |
-          npm install
+          npm ci || npm install
           npx tsc --noEmit
 
       - name: Run ESLint (if configured)
