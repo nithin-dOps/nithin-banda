@@ -40,26 +40,30 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
 
-      - name: Get npm cache directory
-        id: npm-cache-dir
-        run: |
-          echo "dir=$(npm config get cache)" >> $GITHUB_OUTPUT
+      - name: Change to task2-automation directory
+        working-directory: ./task2-automation
+        run: pwd
 
-      - name: Cache npm packages
-        uses: actions/cache@v4
-        id: npm-cache
-        with:
-          path: ${{ steps.npm-cache-dir.outputs.dir }}
-          key: ${{ runner.os }}-node-${{ hashFiles('task2-automation/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-node-
+      - name: Check for package-lock.json
+        id: check-lockfile
+        working-directory: ./task2-automation
+        run: |
+          if [ -f "package-lock.json" ]; then
+            echo "package-lock.json exists"
+            echo "lockfile_exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "package-lock.json not found, will use npm install"
+            echo "lockfile_exists=false" >> $GITHUB_OUTPUT
+          fi
 
       - name: Install dependencies
         working-directory: ./task2-automation
         run: |
-          if [ -f "package-lock.json" ]; then
+          if [ "${{ steps.check-lockfile.outputs.lockfile_exist }}" = "true" ]; then
+            echo "Using npm ci (package-lock.json found)"
             npm ci
           else
+            echo "Using npm install (no package-lock.json found)"
             npm install
           fi
           npx tsc --noEmit
