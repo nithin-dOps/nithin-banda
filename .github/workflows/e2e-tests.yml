@@ -36,7 +36,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: false  # Disable built-in caching
+          cache: 'npm'  # Enable npm caching
 
       - name: Install dependencies
         working-directory: ./task2-automation
@@ -59,7 +59,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: false  # Disable built-in caching
+          cache: 'npm'  # Enable npm caching
 
       - name: Install dependencies
         working-directory: ./task2-automation
