@@ -40,14 +40,11 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
 
-      - name: Navigate to task2-automation
-        run: cd task2-automation
-
-      - name: Install dependencies
-        run: npm install
-
-      - name: Run TypeScript type check
-        run: npx tsc --noEmit
+      - name: Install dependencies and run type check
+        working-directory: ./task2-automation
+        run: |
+          npm install
+          npx tsc --noEmit
 
       - name: Run ESLint (if configured)
         run: |
