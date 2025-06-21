@@ -6,8 +6,7 @@ on:
   pull_request:
     branches: [ main, develop ]
   schedule:
-    # Run tests daily at 2 AM UTC
-    - cron: '0 2 * * *'
+    - cron: '0 2 * * *'  # Run daily at 2 AM UTC
   workflow_dispatch:
     inputs:
       browser:
@@ -26,7 +25,6 @@ env:
   BASE_URL: 'https://goodbudget.com'
 
 jobs:
-  # Lint and type check
   lint-and-typecheck:
     name: Lint and Type Check
     runs-on: ubuntu-latest
@@ -38,63 +36,21 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-
-      - name: Change to task2-automation directory
-        working-directory: ./task2-automation
-        run: pwd
-
-      - name: Check for package-lock.json
-        id: check-lockfile
-        working-directory: ./task2-automation
-        run: |
-          if [ -f "package-lock.json" ]; then
-            echo "package-lock.json exists"
-            echo "lockfile_exists=true" >> $GITHUB_OUTPUT
-          else
-            echo "package-lock.json not found, will use npm install"
-            echo "lockfile_exists=false" >> $GITHUB_OUTPUT
-          fi
+          cache: false  # Disable built-in caching
 
       - name: Install dependencies
         working-directory: ./task2-automation
         run: |
-          if [ "${{ steps.check-lockfile.outputs.lockfile_exist }}" = "true" ]; then
-            echo "Using npm ci (package-lock.json found)"
-            npm ci
-          else
-            echo "Using npm install (no package-lock.json found)"
-            npm install
-          fi
+          npm install
           npx tsc --noEmit
 
-      - name: Run ESLint (if configured)
-        working-directory: ./task2-automation
-        run: |
-          if [ -f ".eslintrc.js" ] || [ -f ".eslintrc.json" ] || [ -f "eslint.config.js" ]; then
-            npx eslint tests/
-          else
-            echo "ESLint not configured, skipping..."
-          fi
-        continue-on-error: true
-
-  # Cross-browser testing matrix
   e2e-tests:
     name: E2E Tests
     runs-on: ubuntu-latest
     needs: lint-and-typecheck
     strategy:
-      fail-fast: false
       matrix:
         browser: [chromium, firefox, webkit]
-        include:
-          - browser: chromium
-            project: chromium
-          - browser: firefox
-            project: firefox
-          - browser: webkit
-            project: webkit
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -103,8 +59,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-          cache-dependency-path: task2-automation/package-lock.json
+          cache: false  # Disable built-in caching
 
       - name: Install dependencies
         working-directory: ./task2-automation
@@ -116,30 +71,11 @@ jobs:
 
       - name: Run E2E tests
         working-directory: ./task2-automation
-        run: npx playwright test --project=${{ matrix.project }}
+        run: npx playwright test --project=${{ matrix.browser }}
         env:
           CI: true
           BASE_URL: ${{ env.BASE_URL }}
 
-      - name: Upload test results
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: test-results-${{ matrix.browser }}
-          path: |
-            task2-automation/test-results/
-            task2-automation/playwright-report/
-          retention-days: 7
-
-      - name: Upload HTML report
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: html-report-${{ matrix.browser }}
-          path: task2-automation/test-results/html-report/
-          retention-days: 7
-
-  # Docker-based testing
   docker-tests:
     name: Docker E2E Tests
     runs-on: ubuntu-latest
@@ -147,7 +83,6 @@ jobs:
     strategy:
       matrix:
         browser: [chromium, firefox, webkit]
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -169,136 +104,3 @@ jobs:
             -e BASE_URL=${{ env.BASE_URL }} \
             goodbudget-e2e:latest \
             npm run test:${{ matrix.browser }}
-
-      - name: Upload Docker test results
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: docker-test-results-${{ matrix.browser }}
-          path: task2-automation/test-results/
-          retention-days: 7
-
-  # Parallel execution test
-  parallel-tests:
-    name: Parallel Cross-Browser Tests
-    runs-on: ubuntu-latest
-    needs: lint-and-typecheck
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-          cache-dependency-path: task2-automation/package-lock.json
-
-      - name: Install dependencies
-        working-directory: ./task2-automation
-        run: npm install
-
-      - name: Install all Playwright browsers
-        working-directory: ./task2-automation
-        run: npx playwright install --with-deps
-
-      - name: Run parallel tests across all browsers
-        working-directory: ./task2-automation
-        run: npm run test:parallel
-        env:
-          CI: true
-          BASE_URL: ${{ env.BASE_URL }}
-
-      - name: Upload parallel test results
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: parallel-test-results
-          path: |
-            task2-automation/test-results/
-            task2-automation/playwright-report/
-          retention-days: 7
-
-  # Test report generation and publishing
-  publish-results:
-    name: Publish Test Results
-    runs-on: ubuntu-latest
-    needs: [e2e-tests, docker-tests]
-    if: always()
-
-    steps:
-      - name: Download all test artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: all-test-results
-
-      - name: Merge test results
-        run: |
-          mkdir -p merged-results
-          find all-test-results -name "*.json" -exec cp {} merged-results/ \;
-          find all-test-results -name "*.xml" -exec cp {} merged-results/ \;
-
-      - name: Publish test results
-        uses: dorny/test-reporter@v1
-        if: always()
-        with:
-          name: E2E Test Results
-          path: 'merged-results/*.xml'
-          reporter: java-junit
-          fail-on-error: false
-
-      - name: Create test summary
-        if: always()
-        run: |
-          echo "## 🧪 E2E Test Results Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Browser Test Results:" >> $GITHUB_STEP_SUMMARY
-          echo "- **Chromium**: $(find all-test-results -name "*chromium*" -type d | wc -l) test runs" >> $GITHUB_STEP_SUMMARY
-          echo "- **Firefox**: $(find all-test-results -name "*firefox*" -type d | wc -l) test runs" >> $GITHUB_STEP_SUMMARY
-          echo "- **WebKit**: $(find all-test-results -name "*webkit*" -type d | wc -l) test runs" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Test Artifacts:" >> $GITHUB_STEP_SUMMARY
-          echo "- Test reports and screenshots are available in the artifacts section" >> $GITHUB_STEP_SUMMARY
-          echo "- Docker-based test results are also included" >> $GITHUB_STEP_SUMMARY
-
-  # Notification on failure
-  notify-failure:
-    name: Notify on Test Failure
-    runs-on: ubuntu-latest
-    needs: [e2e-tests, docker-tests, parallel-tests]
-    if: failure() && (github.event_name == 'push' || github.event_name == 'schedule')
-
-    steps:
-      - name: Create failure issue
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const title = `🚨 E2E Tests Failed - ${new Date().toISOString().split('T')[0]}`;
-            const body = `
-            ## E2E Test Failure Report
-            
-            **Workflow**: ${context.workflow}
-            **Run ID**: ${context.runId}
-            **Commit**: ${context.sha}
-            **Branch**: ${context.ref}
-            
-            The automated E2E tests have failed. Please check the workflow logs and test artifacts for details.
-            
-            ### Next Steps:
-            1. Review the test failure logs
-            2. Check if this is a known issue
-            3. Fix the failing tests or update them if the application behavior has changed
-            4. Re-run the tests to verify the fix
-            
-            **Auto-generated by GitHub Actions**
-            `;
-            
-            github.rest.issues.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              title: title,
-              body: body,
-              labels: ['bug', 'e2e-tests', 'automated']
-            });
