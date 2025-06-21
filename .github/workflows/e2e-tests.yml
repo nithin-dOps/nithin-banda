@@ -39,21 +39,29 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
-          cache-dependency-path: task2-automation/package-lock.json
 
-      - name: Cache node modules
+      - name: Get npm cache directory
+        id: npm-cache-dir
+        run: |
+          echo "dir=$(npm config get cache)" >> $GITHUB_OUTPUT
+
+      - name: Cache npm packages
         uses: actions/cache@v4
-        id: cache
+        id: npm-cache
         with:
-          path: task2-automation/node_modules
+          path: ${{ steps.npm-cache-dir.outputs.dir }}
           key: ${{ runner.os }}-node-${{ hashFiles('task2-automation/package-lock.json') }}
           restore-keys: |
             ${{ runner.os }}-node-
-            
-      - name: Install dependencies and run type check
+
+      - name: Install dependencies
         working-directory: ./task2-automation
         run: |
-          npm ci || npm install
+          if [ -f "package-lock.json" ]; then
+            npm ci
+          else
+            npm install
+          fi
           npx tsc --noEmit
 
       - name: Run ESLint (if configured)
